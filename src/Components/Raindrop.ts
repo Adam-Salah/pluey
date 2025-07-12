@@ -3,7 +3,7 @@ import PhysicsObject from './PhysicsObject';
 
 export default class Raindrop extends PhysicsObject {
     private static spriteList: HTMLImageElement[] = [];
-    private static gravity: number = 98;
+    private static gravity: number = 980;
 
     static {
         Raindrop.spritePath = 'assets/raindrops/';

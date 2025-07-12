@@ -2,27 +2,37 @@ import { useEffect, useRef, useState } from 'react';
 import './App.css';
 import Raindrop from './Components/Raindrop';
 import Ground from './Components/Ground';
+import * as Tone from 'tone';
+import frequencies from './notes-frequencies';
 
 const fps = 60;
 const raindropCooldownMin = 0.1;
-const raindropCooldownMax = 0.1;
+const raindropCooldownMax = 0.4;
 
 export default function App() {
+    // start stop
+    const [start, setStart] = useState<boolean>(false);
+
     // raindrops
     const [raindrops] = useState<Raindrop[]>([]);
+
+    // ground
     const ground = useRef<Ground>(null);
 
-    // reference to canvas
+    // canvas
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    // animation request id
-    const animationRef = useRef<number>(0);
+    // synth
+    const synthRef = useRef<Tone.PolySynth<Tone.Synth<Tone.SynthOptions>>>(new Tone.PolySynth(Tone.Synth).toDestination());
 
     // on first render
     useEffect(() => {
         // set canvas size
         canvasRef.current!.width = window.innerWidth;
         canvasRef.current!.height = window.innerHeight;
+
+        // render once
+        render();
 
         // spawn ground
         ground.current = new Ground({ x: canvasRef.current!.width / 2, y: canvasRef.current!.height - 100 });
@@ -40,8 +50,9 @@ export default function App() {
             }
             requestAnimationFrame(frameOperations);
         }
+        if (!start) return;
         requestAnimationFrame(frameOperations);
-    }, []);
+    }, [start]);
 
     function logic(dt: number) {
         // update raindrops
@@ -52,6 +63,8 @@ export default function App() {
         // destroy raindrops
         raindrops.forEach((raindrop, i) => {
             if (raindrop.positionTopLeft.y > ground.current!.positionTopLeft.y) {
+                let note = Math.round((raindrop.position.x / canvasRef.current!.width) * frequencies.length);
+                synthRef.current.triggerAttackRelease(frequencies[note], '8n');
                 raindrops.splice(i, 1);
             }
         });
@@ -91,11 +104,12 @@ export default function App() {
                 render();
                 timeAtFrame = Date.now();
             }
-            animationRef.current = requestAnimationFrame(frameOperations);
+            requestAnimationFrame(frameOperations);
         }
+        if (!start) return;
         requestAnimationFrame(frameOperations);
-    }, []);
+    }, [start]);
 
     // return canvas
-    return <canvas ref={canvasRef} className='canvas' />;
+    return <canvas ref={canvasRef} className='canvas' onClick={() => {setStart(true)}} />;
 }

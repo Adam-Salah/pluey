@@ -16,7 +16,6 @@ export default class Ground extends WorldObject {
 
         // set sprite
         this._sprite = Ground.sprite;
-        console.log(this._sprite.src);
         this.initUtilVars();
     }
 }
