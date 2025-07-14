@@ -2,16 +2,23 @@ import { useEffect, useRef, useState } from 'react';
 import './App.css';
 import Raindrop from './Components/Raindrop';
 import Ground from './Components/Ground';
-import * as Tone from 'tone';
-import frequencies from './notes-frequencies';
+import { middleCmaj } from './notes-frequencies';
+import type { Vector2 } from './interfaces';
+import WorldObject from './Components/WorldObject';
 
 const fps = 60;
 const raindropCooldownMin = 0.1;
-const raindropCooldownMax = 0.4;
+const raindropCooldownMax = 0.3;
+const raindropStartVelocityMin = 20;
+const raindropStartVelocityMax = 80;
 
 export default function App() {
     // start stop
     const [start, setStart] = useState<boolean>(false);
+
+    // window size
+    const frameSize = useRef<Vector2>({ x: 0, y: 0 });
+    const previousFrameSize = useRef<Vector2>({ x: 0, y: 0 });
 
     // raindrops
     const [raindrops] = useState<Raindrop[]>([]);
@@ -19,33 +26,69 @@ export default function App() {
     // ground
     const ground = useRef<Ground>(null);
 
+    // world objects
+    const [everything] = useState<Set<WorldObject[]>>(new Set());
+
     // canvas
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    // synth
-    const synthRef = useRef<Tone.PolySynth<Tone.Synth<Tone.SynthOptions>>>(new Tone.PolySynth(Tone.Synth).toDestination());
+    const frameResize = () => {
+        // store previous window size
+        previousFrameSize.current = frameSize.current;
 
-    // on first render
-    useEffect(() => {
+        // set window size
+        frameSize.current = { x: window.innerWidth, y: window.innerHeight };
+
         // set canvas size
         canvasRef.current!.width = window.innerWidth;
         canvasRef.current!.height = window.innerHeight;
+    };
+
+    // window size handling setup
+    const resize = () => {
+        frameResize();
+
+        //reposition every object
+        everything.forEach((array) => {
+            array.forEach((worldObject) => {
+                worldObject.resize(frameSize.current, previousFrameSize.current);
+            });
+        });
+    };
+
+    useEffect(() => {
+        window.addEventListener('resize', resize);
+        return () => {
+            window.removeEventListener('resize', resize);
+        };
+    }, []);
+
+    // canvas setup
+    useEffect(() => {
+        frameResize();
+
+        // spawn ground
+        ground.current = new Ground({ x: frameSize.current.x / 2, y: frameSize.current.y - 100 }, {x: frameSize.current.x, y: 1}, 100);
+        everything.add([ground.current]);
 
         // render once
         render();
+    }, [start]);
 
-        // spawn ground
-        ground.current = new Ground({ x: canvasRef.current!.width / 2, y: canvasRef.current!.height - 100 });
+    // spawn raindrops on start
+    useEffect(() => {
+        everything.add(raindrops);
 
-        // spawn raindrops based on cooldown range
         let timeAtFrame = Date.now();
         function frameOperations() {
             let cooldown = (Math.random() * (raindropCooldownMax - raindropCooldownMin) + raindropCooldownMin) * 1000;
             let dt = (Date.now() - timeAtFrame) / 1000;
             if (dt > cooldown / 1000) {
-                let positionX = Math.random() * canvasRef!.current!.width;
-                let velocityY = Math.random() * (80 - 20) + 20;
-                raindrops.push(new Raindrop({ x: positionX, y: -100 }, { x: 0, y: velocityY }, { x: 20, y: 20 }));
+                let positionX = Math.random() * frameSize.current.x;
+                let positionY = Math.min(ground.current!.position.y - 1000, -100);
+                let velocityY = Math.random() * (raindropStartVelocityMax - raindropStartVelocityMin) + raindropStartVelocityMin;
+                let note = Math.floor((positionX / frameSize.current.x) * middleCmaj.length);
+                raindrops.push(new Raindrop({ x: positionX, y: positionY}, { x: 0, y: velocityY }, note));
                 timeAtFrame = Date.now();
             }
             requestAnimationFrame(frameOperations);
@@ -63,8 +106,7 @@ export default function App() {
         // destroy raindrops
         raindrops.forEach((raindrop, i) => {
             if (raindrop.positionTopLeft.y > ground.current!.positionTopLeft.y) {
-                let note = Math.round((raindrop.position.x / canvasRef.current!.width) * frequencies.length);
-                synthRef.current.triggerAttackRelease(frequencies[note], '8n');
+                raindrop.playSound();
                 raindrops.splice(i, 1);
             }
         });
@@ -85,12 +127,12 @@ export default function App() {
 
         // draw ground
         if (ground.current) {
-            context.drawImage(ground.current.sprite, Math.floor(ground.current.positionTopLeft.x), Math.floor(ground.current.positionTopLeft.y));
+            ground.current.draw(context);
         }
 
         // draw raindrops
         raindrops.forEach((raindrop) => {
-            context.drawImage(raindrop.sprite, Math.floor(raindrop.positionTopLeft.x), Math.floor(raindrop.positionTopLeft.y));
+            raindrop.draw(context);
         });
     }
 
@@ -111,5 +153,13 @@ export default function App() {
     }, [start]);
 
     // return canvas
-    return <canvas ref={canvasRef} className='canvas' onClick={() => {setStart(true)}} />;
+    return (
+        <canvas
+            ref={canvasRef}
+            className='canvas'
+            onClick={() => {
+                setStart(true);
+            }}
+        />
+    );
 }
